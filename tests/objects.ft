@@ -35,13 +35,13 @@ println(`has 'name': ${has(obj, 'name')}`);
 println(`has 'missing': ${has(obj, 'missing')}`);
 
 // delete
-delete (obj, 'cool');
+delete obj.cool;
 println(`after delete 'cool': ${obj}`);
 println(`has 'cool': ${has(obj, 'cool')}`);
 
 // delete returns bool
-println(`delete existing: ${delete (obj, 'author')}`);
-println(`delete missing: ${delete (obj, 'nope')}`);
+println(`delete existing: ${delete obj.author}`);
+println(`delete missing: ${delete obj['nope']}`);
 
 // keys and values
 let person = { first: 'Alice', last: 'Smith', age: 30 };

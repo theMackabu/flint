@@ -250,26 +250,9 @@ static uint64_t b_has(uint64_t *args, int n) {
   return mkbool(0);
 }
 
-static uint64_t b_delete(uint64_t *args, int n) {
-  (void)n; if (vtag(args[0]) != T_OBJ || vtag(args[1]) != T_STR) return mkbool(0);
-  Obj *o = &objs[vdata(args[0])]; int key = vdata(args[1]);
-  for (int i = 0; i < o->len; i++) if (o->keys[i] == key) {
-    o->keys[i] = o->keys[o->len-1]; o->vals[i] = o->vals[o->len-1]; o->len--; return mkbool(1);
-  } return mkbool(0);
-}
-
 typedef uint64_t (*Builtin)(uint64_t*, int);
 static struct { char *name; Builtin fn; } builtins[] = {
-  {"print", b_print}, {"println", b_println}, {"eprintln", b_eprintln},
-  {"len", b_len}, {"type", b_type}, {"str", b_str}, {"num", b_num},
-  {"exec", b_exec}, {"fetch", b_fetch}, {"pipe", b_pipe},
-  {"exit", b_exit}, {"env", b_env}, {"setenv", b_setenv},
-  {"fork", b_fork}, {"wait", b_wait},
-  {"read_file", b_read_file}, {"write_file", b_write_file},
-  {"trim", b_trim}, {"substr", b_substr}, {"index_of", b_index_of},
-  {"replace", b_replace}, {"upper", b_upper}, {"lower", b_lower},
-  {"push", b_push}, {"pop", b_pop}, {"keys", b_keys}, {"values", b_values},
-  {"has", b_has}, {"delete", b_delete},
+  {"print", b_print}, {"println", b_println}, {"eprintln", b_eprintln}, {"len", b_len}, {"type", b_type}, {"str", b_str}, {"num", b_num}, {"exec", b_exec}, {"fetch", b_fetch}, {"pipe", b_pipe}, {"exit", b_exit}, {"env", b_env}, {"setenv", b_setenv}, {"fork", b_fork}, {"wait", b_wait}, {"read_file", b_read_file}, {"write_file", b_write_file}, {"trim", b_trim}, {"substr", b_substr}, {"index_of", b_index_of}, {"replace", b_replace}, {"upper", b_upper}, {"lower", b_lower}, {"push", b_push}, {"pop", b_pop}, {"keys", b_keys}, {"values", b_values}, {"has", b_has},
 };
 
 #define NBUILTINS (sizeof builtins / sizeof builtins[0])
@@ -278,7 +261,7 @@ static int find_builtin(char *name) { for (int i = 0; i < (int)NBUILTINS; i++) i
 static struct { char name[64]; char params[16][64]; int nparam; int addr; int slots[16]; int sbase, scount; } funcs[256];
 static int nfuncs; static int find_func(char *name) { for (int i = 0; i < nfuncs; i++) if (!strcmp(funcs[i].name, name)) return i; return -1; }
 
-enum Tok { TNUM=128, TSTR, TID, TIF, TELSE, TWHILE, TTRUE, TFALSE, TNIL, TEQ, TNE, TLE, TGE, TFN, TRET, TLET, TCONST, TEXEC, TTMPL, TEOF };
+enum Tok { TNUM=128, TSTR, TID, TIF, TELSE, TWHILE, TTRUE, TFALSE, TNIL, TEQ, TNE, TLE, TGE, TFN, TRET, TLET, TCONST, TEXEC, TTMPL, TDELETE, TEOF };
 static char src[65536], *p; static int tok; static double toknum; static char tokstr[1024], tokname[64];
 
 static void next(void) {
@@ -296,7 +279,7 @@ static void next(void) {
     if (!strcmp(tokname,"if")) tok=TIF; else if (!strcmp(tokname,"else")) tok=TELSE;
     else if (!strcmp(tokname,"while")) tok=TWHILE; else if (!strcmp(tokname,"function")) tok=TFN;
     else if (!strcmp(tokname,"return")) tok=TRET; else if (!strcmp(tokname,"let")) tok=TLET;
-    else if (!strcmp(tokname,"const")) tok=TCONST;
+    else if (!strcmp(tokname,"const")) tok=TCONST; else if (!strcmp(tokname,"delete")) tok=TDELETE;
     else if (!strcmp(tokname,"true")) tok=TTRUE; else if (!strcmp(tokname,"false")) tok=TFALSE;
     else if (!strcmp(tokname,"nil")) tok=TNIL; return;
   }
@@ -310,8 +293,8 @@ static void next(void) {
   else if (c=='<' && *p=='=') { p++; tok=TLE; } else if (c=='>' && *p=='=') { p++; tok=TGE; } else tok = c;
 }
 
-enum Op { OPUSH, OLOAD, OSTORE, OADD, OSUB, OMUL, ODIV, OMOD, OEQ, ONE, OLT, OGT, OLE, OGE, OJMP, OJNZ, OJEZ, OHALT, ONEG, ONOT, OCALL, OCALL_U, ORET, OPOP, OARR, OOBJ, OIDX, OIDX_SET };
-enum Nd { NNUM, NSTR, NBOOL, NNIL, NID, NBINOP, NUNOP, NASSIGN, NIF, NWHILE, NCALL, NBLOCK, NFUNC, NRET, NARR, NOBJ, NINDEX, NIDX_ASSIGN };
+enum Op { OPUSH, OLOAD, OSTORE, OADD, OSUB, OMUL, ODIV, OMOD, OEQ, ONE, OLT, OGT, OLE, OGE, OJMP, OJNZ, OJEZ, OHALT, ONEG, ONOT, OCALL, OCALL_U, ORET, OPOP, OARR, OOBJ, OIDX, OIDX_SET, ODEL };
+enum Nd { NNUM, NSTR, NBOOL, NNIL, NID, NBINOP, NUNOP, NASSIGN, NIF, NWHILE, NCALL, NBLOCK, NFUNC, NRET, NARR, NOBJ, NINDEX, NIDX_ASSIGN, NDELETE };
 
 typedef struct Node {
   int kind, op; double num; int strid, bval; char name[64];
@@ -319,8 +302,7 @@ typedef struct Node {
 } Node;
 
 static void expect(int t)  { if (tok != t) { fprintf(stderr, "expected '%c' got %d\n", t, tok); exit(1); } next(); }
-static Node *mknode(int k) { Node *n = calloc(1, sizeof(Node)); n->kind = k; return n; }
-static Node *expr(void);
+static Node *mknode(int k) { Node *n = calloc(1, sizeof(Node)); n->kind = k; return n; } static Node *postfix(void); static Node *expr(void);
 
 static Node *atom(void) {
   if (tok == TNUM)   { Node *n = mknode(NNUM); n->num = toknum; next(); return n; }
@@ -376,6 +358,11 @@ static Node *atom(void) {
   if (tok == '(') { next(); Node *n = expr(); expect(')'); return n; }
   if (tok == '-') { next(); Node *n = mknode(NUNOP); n->op = '-'; n->a = atom(); return n; }
   if (tok == '!') { next(); Node *n = mknode(NUNOP); n->op = '!'; n->a = atom(); return n; }
+  if (tok == TDELETE) {
+    next(); Node *target = postfix();
+    if (target->kind != NINDEX) { fprintf(stderr, "delete requires obj.key or obj[key]\n"); exit(1); }
+    Node *n = mknode(NDELETE); n->a = target->a; n->b = target->b; return n;
+  }
   fprintf(stderr, "unexpected token %d\n", tok); exit(1);
 }
 
@@ -505,8 +492,9 @@ static void compile(Node *n) {
   case NOBJ:   for (int i = 0; i < n->nargs; i++) compile(n->args[i]); EMIT(OOBJ); EMIT(n->nargs/2); break;
   case NINDEX: compile(n->a); compile(n->b); EMIT(OIDX); break;
   case NIDX_ASSIGN: compile(n->a); compile(n->b); compile(n->c); EMIT(OIDX_SET); break;
+  case NDELETE: compile(n->a); compile(n->b); EMIT(ODEL); break;
   case NBLOCK: { int saved = nvars;
-    for (int i = 0; i < n->nstmts; i++) { compile(n->stmts[i]); int k = n->stmts[i]->kind; if (k==NCALL||k==NID||k==NNUM||k==NSTR||k==NBOOL||k==NNIL||k==NBINOP||k==NUNOP||k==NINDEX) EMIT(OPOP); }
+    for (int i = 0; i < n->nstmts; i++) { compile(n->stmts[i]); int k = n->stmts[i]->kind; if (k==NCALL||k==NID||k==NNUM||k==NSTR||k==NBOOL||k==NNIL||k==NBINOP||k==NUNOP||k==NINDEX||k==NDELETE) EMIT(OPOP); }
     nvars = saved; } break;
   }
 }
@@ -519,7 +507,7 @@ static void run(void) {
     [OJMP]=&&L_JMP, [OJNZ]=&&L_JNZ, [OJEZ]=&&L_JEZ,
     [OHALT]=&&L_HALT, [ONEG]=&&L_NEG, [ONOT]=&&L_NOT, [OCALL]=&&L_CALL,
     [OCALL_U]=&&L_CALL_U, [ORET]=&&L_RET, [OPOP]=&&L_POP,
-    [OARR]=&&L_ARR, [OOBJ]=&&L_OBJ, [OIDX]=&&L_IDX, [OIDX_SET]=&&L_IDX_SET,
+    [OARR]=&&L_ARR, [OOBJ]=&&L_OBJ, [OIDX]=&&L_IDX, [OIDX_SET]=&&L_IDX_SET, [ODEL]=&&L_DEL,
   };
   uint64_t stack[4096]; int sp = 0, ip = 0;
   #define NEXT goto *dispatch[code[ip++]]
@@ -582,6 +570,10 @@ static void run(void) {
     if (vtag(cont)==T_ARR) { int idx = (int)asnum(key); Arr *a = &arrs[vdata(cont)]; if (idx>=0 && idx<a->len) a->data[idx] = val; }
     else if (vtag(cont)==T_OBJ) { int k = vtag(key)==T_STR ? vdata(key) : intern((char*)""); obj_set(&objs[vdata(cont)], k, val); }
     PUSH(val); NEXT; }
+  L_DEL: { uint64_t key = POP, cont = POP;
+    if (vtag(cont)==T_OBJ) { Obj *o = &objs[vdata(cont)]; int k = vtag(key)==T_STR ? vdata(key) : intern((char*)"");
+      int found = 0; for (int i = 0; i < o->len; i++) if (o->keys[i] == k) { o->keys[i] = o->keys[o->len-1]; o->vals[i] = o->vals[o->len-1]; o->len--; found = 1; break; }
+      PUSH(mkbool(found)); } else PUSH(mkbool(0)); NEXT; }
   L_HALT: return;
 }
 
