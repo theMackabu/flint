@@ -1,0 +1,15 @@
+const json = fetch('https://themackabu.dev/test.json');
+
+function jq(data, query) {
+  return pipe(data, `jq -r '${query}'`);
+}
+
+const author = jq(json, '.slideshow.author');
+const title = jq(json, '.slideshow.metadata.title');
+const views = jq(json, '.slideshow.metadata.viewCount');
+const first = jq(json, '.slideshow.slides[0].title');
+
+println(`author: ${author}`);
+println(`title: ${title}`);
+println(`views: ${views}`);
+println(`first slide: ${first}`);

@@ -3,13 +3,13 @@
 println('hello', 'world', 42, true, nil);
 println(type(3.14), type('hi'), type(true), type(nil));
 println(len('flint'));
-println(str(123) + ' is a string now');
+println(`${str(123)} is a string now`);
 println(num('99') + 1);
-println('length of hello world:', len('hello world'));
+println(`length of hello world: ${len('hello world')}`);
 
 // using functions with builtins
 function describe(val) {
-  return type(val) + ': ' + str(val);
+  return `${type(val)}: ${val}`;
 }
 
 println(describe(42));

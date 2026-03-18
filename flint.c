@@ -4,6 +4,8 @@
 #include <ctype.h>
 #include <stdint.h>
 #include <math.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 #define PREFIX    0xFFF0000000000000ULL
 #define DATA_MASK 0x00007FFFFFFFFFFFULL
@@ -34,6 +36,7 @@ static uint64_t b_print(uint64_t *args, int n) {
 
 static uint64_t b_println(uint64_t *args, int n) { b_print(args, n); printf("\n"); return mknil(); }
 static uint64_t b_len(uint64_t *args, int n) { (void)n; return vtag(args[0]) == T_STR ? mknum(strlen(strtab[vdata(args[0])])) : mknum(0); }
+static uint64_t b_exit(uint64_t *args, int n) { exit(n > 0 && vtag(args[0]) == T_NUM ? (int)asnum(args[0]) : 0); }
 
 static uint64_t b_type(uint64_t *args, int n) {
   (void)n; const char *names[] = {"num","str","bool","nil"};
@@ -53,9 +56,144 @@ static uint64_t b_num(uint64_t *args, int n) {
   return args[0];
 }
 
+static uint64_t b_exec(uint64_t *args, int n) {
+  (void)n; if (vtag(args[0]) != T_STR) return mknil();
+  FILE *fp = popen(strtab[vdata(args[0])], "r"); if (!fp) return mknil();
+  char buf[65536]; int len = fread(buf, 1, sizeof(buf)-1, fp); pclose(fp);
+  while (len > 0 && buf[len-1] == '\n') len--;
+  buf[len] = 0; return mkstr(intern(buf));
+}
+
+static uint64_t b_fetch(uint64_t *args, int n) {
+  (void)n; if (vtag(args[0]) != T_STR) return mknil();
+  char cmd[4096]; snprintf(cmd, sizeof cmd, "curl -sfL '%s'", strtab[vdata(args[0])]);
+  FILE *fp = popen(cmd, "r"); if (!fp) return mknil();
+  char buf[65536]; int len = fread(buf, 1, sizeof(buf)-1, fp); pclose(fp);
+  buf[len] = 0; return mkstr(intern(buf));
+}
+
+static uint64_t b_pipe(uint64_t *args, int n) {
+  (void)n; if (vtag(args[0]) != T_STR || vtag(args[1]) != T_STR) return mknil();
+  int in_fd[2], out_fd[2];
+  if (pipe(in_fd) < 0 || pipe(out_fd) < 0) return mknil();
+  pid_t pid = fork();
+  if (pid < 0) return mknil();
+  if (pid == 0) {
+    close(in_fd[1]); close(out_fd[0]);
+    dup2(in_fd[0], 0); dup2(out_fd[1], 1);
+    close(in_fd[0]); close(out_fd[1]);
+    execl("/bin/sh", "sh", "-c", strtab[vdata(args[1])], NULL); _exit(1);
+  }
+  close(in_fd[0]); close(out_fd[1]);
+  const char *data = strtab[vdata(args[0])];
+  write(in_fd[1], data, strlen(data)); close(in_fd[1]);
+  char buf[65536]; int total = 0, r;
+  while ((r = read(out_fd[0], buf + total, sizeof(buf)-1-total)) > 0) total += r;
+  close(out_fd[0]); waitpid(pid, NULL, 0);
+  while (total > 0 && buf[total-1] == '\n') total--;
+  buf[total] = 0; return mkstr(intern(buf));
+}
+
+static uint64_t b_eprintln(uint64_t *args, int n) {
+  for (int i = 0; i < n; i++) { if (i) fprintf(stderr, " "); switch (vtag(args[i])) {
+  case T_NUM: { double d = asnum(args[i]); d == (int)d ? fprintf(stderr,"%d",(int)d) : fprintf(stderr,"%g",d); } break;
+  case T_STR: fprintf(stderr, "%s", strtab[vdata(args[i])]); break;
+  case T_BOOL: fprintf(stderr, "%s", vdata(args[i]) ? "true" : "false"); break; case T_NIL: fprintf(stderr, "nil"); break;
+  }} fprintf(stderr, "\n"); return mknil();
+}
+
+static uint64_t b_env(uint64_t *args, int n) {
+  (void)n; if (vtag(args[0]) != T_STR) return mknil();
+  char *v = getenv(strtab[vdata(args[0])]); return v ? mkstr(intern(v)) : mknil();
+}
+
+static uint64_t b_setenv(uint64_t *args, int n) {
+  (void)n; if (vtag(args[0]) != T_STR || vtag(args[1]) != T_STR) return mkbool(0);
+  return mkbool(setenv(strtab[vdata(args[0])], strtab[vdata(args[1])], 1) == 0);
+}
+
+static uint64_t b_fork(uint64_t *args, int n) {
+  (void)args; (void)n; fflush(stdout); fflush(stderr);
+  pid_t pid = fork(); return pid < 0 ? mknil() : mknum(pid);
+}
+
+static uint64_t b_wait(uint64_t *args, int n) {
+  (void)args; (void)n; int status; pid_t pid = wait(&status);
+  return pid < 0 ? mknil() : mknum(WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+}
+
+static uint64_t b_read_file(uint64_t *args, int n) {
+  (void)n; if (vtag(args[0]) != T_STR) return mknil();
+  FILE *fp = fopen(strtab[vdata(args[0])], "r"); if (!fp) return mknil();
+  char buf[65536]; int len = fread(buf, 1, sizeof(buf)-1, fp); fclose(fp);
+  buf[len] = 0; return mkstr(intern(buf));
+}
+
+static uint64_t b_write_file(uint64_t *args, int n) {
+  (void)n; if (n < 2 || vtag(args[0]) != T_STR || vtag(args[1]) != T_STR) return mkbool(0);
+  FILE *fp = fopen(strtab[vdata(args[0])], "w"); if (!fp) return mkbool(0);
+  fprintf(fp, "%s", strtab[vdata(args[1])]); fclose(fp); return mkbool(1);
+}
+
+static uint64_t b_trim(uint64_t *args, int n) {
+  (void)n; if (vtag(args[0]) != T_STR) return args[0];
+  char *s = strtab[vdata(args[0])], *e; while (isspace(*s)) s++;
+  e = s + strlen(s); while (e > s && isspace(e[-1])) e--;
+  char buf[2048]; int len = e - s; memcpy(buf, s, len); buf[len] = 0;
+  return mkstr(intern(buf));
+}
+
+static uint64_t b_substr(uint64_t *args, int n) {
+  if (vtag(args[0]) != T_STR) return mknil();
+  char *s = strtab[vdata(args[0])]; int slen = strlen(s);
+  int start = n > 1 ? (int)asnum(args[1]) : 0;
+  int count = n > 2 ? (int)asnum(args[2]) : slen - start;
+  if (start < 0) start = 0; if (start >= slen) return mkstr(intern(""));
+  if (count > slen - start) count = slen - start;
+  char buf[2048]; memcpy(buf, s + start, count); buf[count] = 0;
+  return mkstr(intern(buf));
+}
+
+static uint64_t b_index_of(uint64_t *args, int n) {
+  (void)n; if (vtag(args[0]) != T_STR || vtag(args[1]) != T_STR) return mknum(-1);
+  char *pos = strstr(strtab[vdata(args[0])], strtab[vdata(args[1])]);
+  return pos ? mknum(pos - strtab[vdata(args[0])]) : mknum(-1);
+}
+
+static uint64_t b_replace(uint64_t *args, int n) {
+  (void)n; if (vtag(args[0])!=T_STR || vtag(args[1])!=T_STR || vtag(args[2])!=T_STR) return args[0];
+  char *s = strtab[vdata(args[0])], *old = strtab[vdata(args[1])], *rep = strtab[vdata(args[2])];
+  int olen = strlen(old); if (!olen) return args[0];
+  char buf[4096]; char *w = buf;
+  while (*s) { char *f = strstr(s, old);
+    if (!f) { while (*s) *w++ = *s++; } else { memcpy(w, s, f-s); w += f-s; int rlen=strlen(rep); memcpy(w, rep, rlen); w += rlen; s = f + olen; }
+  } *w = 0; return mkstr(intern(buf));
+}
+
+static uint64_t b_upper(uint64_t *args, int n) {
+  (void)n; if (vtag(args[0]) != T_STR) return args[0];
+  char buf[2048]; char *s = strtab[vdata(args[0])]; int i = 0;
+  while (s[i]) { buf[i] = toupper(s[i]); i++; } buf[i] = 0;
+  return mkstr(intern(buf));
+}
+
+static uint64_t b_lower(uint64_t *args, int n) {
+  (void)n; if (vtag(args[0]) != T_STR) return args[0];
+  char buf[2048]; char *s = strtab[vdata(args[0])]; int i = 0;
+  while (s[i]) { buf[i] = tolower(s[i]); i++; } buf[i] = 0;
+  return mkstr(intern(buf));
+}
+
 typedef uint64_t (*Builtin)(uint64_t*, int);
 static struct { char *name; Builtin fn; } builtins[] = {
-  {"print", b_print}, {"println", b_println}, {"len", b_len}, {"type", b_type}, {"str", b_str}, {"num", b_num},
+  {"print", b_print}, {"println", b_println}, {"eprintln", b_eprintln},
+  {"len", b_len}, {"type", b_type}, {"str", b_str}, {"num", b_num},
+  {"exec", b_exec}, {"fetch", b_fetch}, {"pipe", b_pipe},
+  {"exit", b_exit}, {"env", b_env}, {"setenv", b_setenv},
+  {"fork", b_fork}, {"wait", b_wait},
+  {"read_file", b_read_file}, {"write_file", b_write_file},
+  {"trim", b_trim}, {"substr", b_substr}, {"index_of", b_index_of},
+  {"replace", b_replace}, {"upper", b_upper}, {"lower", b_lower},
 };
 
 #define NBUILTINS (sizeof builtins / sizeof builtins[0])
@@ -64,7 +202,7 @@ static int find_builtin(char *name) { for (int i = 0; i < (int)NBUILTINS; i++) i
 static struct { char name[64]; char params[16][64]; int nparam; int addr; int slots[16]; int sbase, scount; } funcs[256];
 static int nfuncs; static int find_func(char *name) { for (int i = 0; i < nfuncs; i++) if (!strcmp(funcs[i].name, name)) return i; return -1; }
 
-enum Tok { TNUM=128, TSTR, TID, TIF, TELSE, TWHILE, TTRUE, TFALSE, TNIL, TEQ, TNE, TLE, TGE, TFN, TRET, TLET, TEOF };
+enum Tok { TNUM=128, TSTR, TID, TIF, TELSE, TWHILE, TTRUE, TFALSE, TNIL, TEQ, TNE, TLE, TGE, TFN, TRET, TLET, TCONST, TEXEC, TTMPL, TEOF };
 static char src[65536], *p; static int tok; static double toknum; static char tokstr[1024], tokname[64];
 
 static void next(void) {
@@ -82,9 +220,15 @@ static void next(void) {
     if (!strcmp(tokname,"if")) tok=TIF; else if (!strcmp(tokname,"else")) tok=TELSE;
     else if (!strcmp(tokname,"while")) tok=TWHILE; else if (!strcmp(tokname,"function")) tok=TFN;
     else if (!strcmp(tokname,"return")) tok=TRET; else if (!strcmp(tokname,"let")) tok=TLET;
+    else if (!strcmp(tokname,"const")) tok=TCONST;
     else if (!strcmp(tokname,"true")) tok=TTRUE; else if (!strcmp(tokname,"false")) tok=TFALSE;
     else if (!strcmp(tokname,"nil")) tok=TNIL; return;
   }
+  if (*p == '$' && p[1] == '`') {
+    p += 2; char *s = tokstr; while (*p && *p != '`') *s++ = *p++;
+    *s = 0; if (*p == '`') p++; tok = TEXEC; return;
+  }
+  if (*p == '`') { p++; tok = TTMPL; return; }
   char c = *p++;
   if (c=='=' && *p=='=') { p++; tok=TEQ; } else if (c=='!' && *p=='=') { p++; tok=TNE; }
   else if (c=='<' && *p=='=') { p++; tok=TLE; } else if (c=='>' && *p=='=') { p++; tok=TGE; } else tok = c;
@@ -108,6 +252,27 @@ static Node *atom(void) {
   if (tok == TTRUE)  { Node *n = mknode(NBOOL); n->bval = 1; next(); return n; }
   if (tok == TFALSE) { Node *n = mknode(NBOOL); n->bval = 0; next(); return n; }
   if (tok == TNIL)   { Node *n = mknode(NNIL); next(); return n; }
+  if (tok == TEXEC) {
+    Node *cmd = mknode(NSTR); cmd->strid = intern(tokstr); next();
+    Node *n = mknode(NCALL); strcpy(n->name, "exec"); n->args[n->nargs++] = cmd; return n;
+  }
+  if (tok == TTMPL) {
+    Node *res = NULL; char buf[1024]; int bl = 0;
+    #define ADDNODE(nd) do { if (res) { Node *a=mknode(NBINOP); a->op=OADD; a->a=res; a->b=(nd); res=a; } else res=(nd); } while(0)
+    #define FLUSH() do { if (bl) { buf[bl]=0; Node *s=mknode(NSTR); s->strid=intern(buf); ADDNODE(s); bl=0; } } while(0)
+    while (*p && *p != '`') {
+      if (*p == '$' && p[1] == '{') {
+        FLUSH(); p += 2; next(); Node *e = expr();
+        Node *c = mknode(NCALL); strcpy(c->name, "str"); c->args[c->nargs++] = e; ADDNODE(c);
+      } else if (*p == '\\') { p++; buf[bl++] = *p=='n' ? '\n' : *p=='t' ? '\t' : *p; p++;
+      } else buf[bl++] = *p++;
+    }
+    FLUSH(); if (*p == '`') p++; next();
+    if (!res) { res = mknode(NSTR); res->strid = intern(""); }
+    return res;
+    #undef FLUSH
+    #undef ADDNODE
+  }
   if (tok == TID) {
     char name[64]; strcpy(name, tokname); next(); if (tok == '(') {
       next(); Node *n = mknode(NCALL); strcpy(n->name, name);
@@ -142,9 +307,11 @@ static Node *block(void) {
 }
 
 static Node *stmt(void) {
-  if (tok == TLET) {
+  if (tok == TLET || tok == TCONST) {
+    int is_const = tok == TCONST;
     next(); char name[64]; strcpy(name, tokname); next(); expect('=');
-    Node *n = mknode(NASSIGN); strcpy(n->name, name); n->bval = 1; n->a = expr(); expect(';'); return n;
+    Node *n = mknode(NASSIGN); strcpy(n->name, name); n->bval = 1; n->op = is_const;
+    n->a = expr(); expect(';'); return n;
   }
   if (tok == TRET) {
     next(); Node *n = mknode(NRET); if (tok != ';') n->a = expr(); expect(';'); return n;
@@ -179,6 +346,7 @@ static Node *stmt(void) {
 }
 
 static uint64_t code[65536]; static int cp; static uint64_t vars_[256]; static char *varnames[256]; static int nvars, nvars_hwm;
+static int varconst[256];
 static struct { int ip; uint64_t saved[64]; int base, count; } frames[256]; static int csp;
 static int varslot(char *n) { for (int i = nvars-1; i >= 0; i--) if (!strcmp(varnames[i], n)) return i; varnames[nvars] = strdup(n); if (++nvars > nvars_hwm) nvars_hwm = nvars; return nvars-1; }
 static int newslot(char *n) { varnames[nvars] = strdup(n); if (++nvars > nvars_hwm) nvars_hwm = nvars; return nvars-1; }
@@ -194,7 +362,10 @@ static void compile(Node *n) {
   case NBOOL:   EMIT(OPUSH); EMITV(mkbool(n->bval)); break;
   case NNIL:    EMIT(OPUSH); EMITV(mknil()); break;
   case NID:     EMIT(OLOAD); EMIT(varslot(n->name)); break;
-  case NASSIGN: compile(n->a); EMIT(OSTORE); EMIT(n->bval ? newslot(n->name) : varslot(n->name)); break;
+  case NASSIGN: { compile(n->a); int slot = n->bval ? newslot(n->name) : varslot(n->name);
+    if (!n->bval && varconst[slot]) { fprintf(stderr, "cannot reassign const '%s'\n", n->name); exit(1); }
+    if (n->op) varconst[slot] = 1;
+    EMIT(OSTORE); EMIT(slot); } break;
   case NBINOP:  compile(n->a); compile(n->b); EMIT(n->op); break;
   case NUNOP:   compile(n->a); EMIT(n->op == '-' ? ONEG : ONOT); break;
   case NCALL: {
@@ -252,7 +423,12 @@ static void run(void) {
   }
   L_SUB: NUMBIN(-)  L_MUL: NUMBIN(*)  L_DIV: NUMBIN(/)
   L_MOD: { double b=asnum(POP),a=asnum(POP); PUSH(mknum(fmod(a,b))); NEXT; }
-  L_EQ:  CMPBIN(==) L_NE:  CMPBIN(!=)
+  L_EQ: { uint64_t b=POP,a=POP; 
+    if(vtag(a)==T_STR&&vtag(b)==T_STR) PUSH(mkbool(!strcmp(strtab[vdata(a)],strtab[vdata(b)])));
+    else if(vtag(a)==vtag(b)) PUSH(mkbool(a==b)); else PUSH(mkbool(0)); NEXT; }
+  L_NE: { uint64_t b=POP,a=POP; 
+    if(vtag(a)==T_STR&&vtag(b)==T_STR) PUSH(mkbool(!!strcmp(strtab[vdata(a)],strtab[vdata(b)])));
+    else if(vtag(a)==vtag(b)) PUSH(mkbool(a!=b)); else PUSH(mkbool(1)); NEXT; }
   L_LT:  CMPBIN(<)  L_GT:  CMPBIN(>)
   L_LE:  CMPBIN(<=) L_GE:  CMPBIN(>=)
   L_NEG: stack[sp-1] = mknum(-asnum(stack[sp-1])); NEXT;

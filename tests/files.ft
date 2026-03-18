@@ -1,0 +1,17 @@
+let config = 'host=localhost\nport=8080\ndebug=true';
+write_file('config.txt', config);
+println('wrote config');
+
+let data = read_file('config.txt');
+println('config:');
+println(data);
+
+let src = read_file('tests/fib35.ft');
+write_file('fib_copy.ft', src);
+println('copied fib35.ft -> fib_copy.ft');
+
+const verify = read_file('tests/fib35.ft') == read_file('fib_copy.ft');
+println('verify:', verify);
+
+exec('rm config.txt fib_copy.ft');
+println('cleaned up');

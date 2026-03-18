@@ -1,0 +1,25 @@
+// read environment
+println(`user: ${env('USER')}`);
+println(`shell: ${env('SHELL')}`);
+println(`home: ${env('HOME')}`);
+
+// set and read back
+setenv('FLINT_MODE', 'production');
+println(`mode: ${env('FLINT_MODE')}`);
+
+// check for missing env var
+let missing = env('FLINT_NONEXISTENT');
+if (missing == nil) println('FLINT_NONEXISTENT is not set');
+
+// child processes inherit env
+setenv('GREETING', 'hello from flint');
+println(`child sees: ${exec('echo $GREETING')}`);
+
+// exit with code
+if (env('SHELL') == nil) {
+  eprintln('error: no shell found');
+  exit(1);
+}
+
+println('all good');
+exit(0);

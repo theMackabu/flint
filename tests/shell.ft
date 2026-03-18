@@ -1,0 +1,18 @@
+// shell backticks
+println(`host: ${$`hostname`}`);
+println(`user: ${$`whoami`}`);
+println(`cwd: ${$`pwd`}`);
+
+// exec() for dynamic commands
+let dir = 'tests';
+let files = exec(`ls ${dir}`);
+println('test files:');
+println(files);
+
+// fetch
+let ip = fetch('https://api.ipify.org');
+println(`public ip: ${ip}`);
+
+// piping and chaining
+let count = trim($`ls tests/ | wc -l`);
+println(`num tests: ${count}`);

@@ -1,0 +1,25 @@
+// pipe data directly into commands — no temp files, no echo
+let csv = 'name,age,city\nalice,30,nyc\nbob,25,sf\ncharlie,35,la';
+
+// count lines
+let lines = pipe(csv, 'wc -l');
+println(`rows: ${lines}`);
+
+// grep a row
+let found = pipe(csv, 'grep bob');
+println(`found: ${found}`);
+
+// awk to extract column
+let names = pipe(csv, "awk -F, 'NR>1 {print $1}'");
+println('names:');
+println(names);
+
+// chained: sort by age
+let sorted = pipe(csv, "tail -n+2 | sort -t, -k2 -n | awk -F, '{print $1, $2}'");
+println('sorted by age:');
+println(sorted);
+
+// pipe into jq
+let json = '{"users": [{"name": "alice"}, {"name": "bob"}]}';
+let first_user = pipe(json, "jq -r '.users[0].name'");
+println(`first user: ${first_user}`);

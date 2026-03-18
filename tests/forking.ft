@@ -1,0 +1,31 @@
+// fork a child process
+let pid = fork();
+
+if (pid == 0) {
+  println(`child: pid ${$`echo $$`}`);
+  println('child: doing work...');
+  exit(42);
+} else {
+  println(`parent: forked child ${pid}`);
+  let status = wait();
+  println(`parent: child exited with ${status}`);
+}
+
+// fork multiple workers
+let i = 0;
+while (i < 3) {
+  let p = fork();
+  if (p == 0) {
+    println(`worker ${i} started`);
+    exit(0);
+  }
+  i = i + 1;
+}
+
+// wait for all
+let w = 0;
+while (w < 3) {
+  wait();
+  w = w + 1;
+}
+println('all workers done');

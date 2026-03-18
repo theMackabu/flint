@@ -1,0 +1,40 @@
+// trim
+println(trim('  hello  '));
+println(trim('\n\ttabs and newlines\n'));
+
+// substr
+let s = 'hello world';
+println(substr(s, 6));
+println(substr(s, 0, 5));
+println(substr(s, 3, 2));
+
+// index_of
+println(`"world" at index: ${index_of(s, 'world')}`);
+println(`"xyz" at index: ${index_of(s, 'xyz')}`);
+
+// replace
+println(replace('foo bar foo baz foo', 'foo', 'qux'));
+println(replace('aaa', 'a', 'bb'));
+
+// upper / lower
+println(upper('hello world'));
+println(lower('HELLO WORLD'));
+
+// combining them
+let csv = '  Alice, Bob, Charlie  ';
+let clean = trim(csv);
+println(`cleaned: "${clean}"`);
+println(`upper: ${upper(clean)}`);
+println(`first name ends at: ${index_of(clean, ',')}`);
+println(`first name: ${substr(clean, 0, index_of(clean, ','))}`);
+
+// practical: parse a key=value string
+let line = 'name=flint';
+let eq = index_of(line, '=');
+let key = substr(line, 0, eq);
+let val = substr(line, eq + 1);
+println(`key="${key}" val="${val}"`);
+
+// chain operations
+let messy = '  HELLO, World!  ';
+println(replace(trim(lower(messy)), 'hello', 'hi'));
