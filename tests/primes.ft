@@ -1,14 +1,15 @@
-n = 2;
-
-while (n <= 30) {
-  is_prime = 1;
-  d = 2;
-
+function is_prime(n) {
+  if (n < 2) return false;
+  let d = 2;
   while (d * d <= n) {
-    if (n % d == 0) is_prime = 0;
+    if (n % d == 0) return false;
     d = d + 1;
   }
+  return true;
+}
 
-  if (is_prime) println(n);
+let n = 2;
+while (n <= 30) {
+  if (is_prime(n)) println(n);
   n = n + 1;
 }

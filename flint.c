@@ -61,7 +61,10 @@ static struct { char *name; Builtin fn; } builtins[] = {
 #define NBUILTINS (sizeof builtins / sizeof builtins[0])
 static int find_builtin(char *name) { for (int i = 0; i < (int)NBUILTINS; i++) if (!strcmp(builtins[i].name, name)) return i; return -1; }
 
-enum Tok { TNUM=128, TSTR, TID, TIF, TELSE, TWHILE, TTRUE, TFALSE, TNIL, TEQ, TNE, TLE, TGE, TEOF };
+static struct { char name[64]; char params[16][64]; int nparam; int addr; int slots[16]; } funcs[256];
+static int nfuncs; static int find_func(char *name) { for (int i = 0; i < nfuncs; i++) if (!strcmp(funcs[i].name, name)) return i; return -1; }
+
+enum Tok { TNUM=128, TSTR, TID, TIF, TELSE, TWHILE, TTRUE, TFALSE, TNIL, TEQ, TNE, TLE, TGE, TFN, TRET, TLET, TEOF };
 static char src[65536], *p; static int tok; static double toknum; static char tokstr[1024], tokname[64];
 
 static void next(void) {
@@ -77,7 +80,8 @@ static void next(void) {
   if (isalpha(*p) || *p == '_') {
     char *s = tokname; while (isalnum(*p) || *p == '_') *s++ = *p++; *s = 0; tok = TID;
     if (!strcmp(tokname,"if")) tok=TIF; else if (!strcmp(tokname,"else")) tok=TELSE;
-    else if (!strcmp(tokname,"while")) tok=TWHILE;
+    else if (!strcmp(tokname,"while")) tok=TWHILE; else if (!strcmp(tokname,"function")) tok=TFN;
+    else if (!strcmp(tokname,"return")) tok=TRET; else if (!strcmp(tokname,"let")) tok=TLET;
     else if (!strcmp(tokname,"true")) tok=TTRUE; else if (!strcmp(tokname,"false")) tok=TFALSE;
     else if (!strcmp(tokname,"nil")) tok=TNIL; return;
   }
@@ -86,8 +90,8 @@ static void next(void) {
   else if (c=='<' && *p=='=') { p++; tok=TLE; } else if (c=='>' && *p=='=') { p++; tok=TGE; } else tok = c;
 }
 
-enum Op { OPUSH, OLOAD, OSTORE, OADD, OSUB, OMUL, ODIV, OMOD, OEQ, ONE, OLT, OGT, OLE, OGE, OJMP, OJNZ, OJEZ, OHALT, ONEG, ONOT, OCALL };
-enum Nd { NNUM, NSTR, NBOOL, NNIL, NID, NBINOP, NUNOP, NASSIGN, NIF, NWHILE, NCALL, NBLOCK };
+enum Op { OPUSH, OLOAD, OSTORE, OADD, OSUB, OMUL, ODIV, OMOD, OEQ, ONE, OLT, OGT, OLE, OGE, OJMP, OJNZ, OJEZ, OHALT, ONEG, ONOT, OCALL, OCALL_U, ORET, OPOP };
+enum Nd { NNUM, NSTR, NBOOL, NNIL, NID, NBINOP, NUNOP, NASSIGN, NIF, NWHILE, NCALL, NBLOCK, NFUNC, NRET };
 
 typedef struct Node {
   int kind, op; double num; int strid, bval; char name[64];
@@ -138,6 +142,19 @@ static Node *block(void) {
 }
 
 static Node *stmt(void) {
+  if (tok == TLET) {
+    next(); char name[64]; strcpy(name, tokname); next(); expect('=');
+    Node *n = mknode(NASSIGN); strcpy(n->name, name); n->bval = 1; n->a = expr(); expect(';'); return n;
+  }
+  if (tok == TRET) {
+    next(); Node *n = mknode(NRET); if (tok != ';') n->a = expr(); expect(';'); return n;
+  }
+  if (tok == TFN) {
+    next(); int idx = nfuncs++; strcpy(funcs[idx].name, tokname); next(); expect('(');
+    if (tok != ')') { strcpy(funcs[idx].params[funcs[idx].nparam++], tokname); next();
+      while (tok == ',') { next(); strcpy(funcs[idx].params[funcs[idx].nparam++], tokname); next(); } }
+    expect(')'); Node *n = mknode(NFUNC); n->num = idx; n->a = block(); return n;
+  }
   if (tok == TIF) {
     next(); expect('('); Node *n = mknode(NIF); n->a = expr(); expect(')');
     n->b = block(); if (tok == TELSE) { next(); n->c = block(); } return n;
@@ -146,6 +163,7 @@ static Node *stmt(void) {
     next(); expect('('); Node *n = mknode(NWHILE); n->a = expr(); expect(')');
     n->b = block(); return n;
   }
+  if (tok == '{') return block();
   if (tok == TID) {
     char name[64]; strcpy(name, tokname); next();
     if (tok == '=') {
@@ -161,7 +179,9 @@ static Node *stmt(void) {
 }
 
 static uint64_t code[65536]; static int cp; static uint64_t vars_[256]; static char *varnames[256]; static int nvars;
-static int varslot(char *n) { for (int i = 0; i < nvars; i++) if (!strcmp(varnames[i], n)) return i; varnames[nvars] = strdup(n); return nvars++; }
+static struct { int ip; uint64_t saved[16]; int nslots; int slots[16]; } frames[256]; static int csp;
+static int varslot(char *n) { for (int i = nvars-1; i >= 0; i--) if (!strcmp(varnames[i], n)) return i; varnames[nvars] = strdup(n); return nvars++; }
+static int newslot(char *n) { varnames[nvars] = strdup(n); return nvars++; }
 
 #define EMIT(o)  (code[cp++] = (uint64_t)(o))
 #define EMITV(v) (code[cp++] = (v))
@@ -174,22 +194,30 @@ static void compile(Node *n) {
   case NBOOL:   EMIT(OPUSH); EMITV(mkbool(n->bval)); break;
   case NNIL:    EMIT(OPUSH); EMITV(mknil()); break;
   case NID:     EMIT(OLOAD); EMIT(varslot(n->name)); break;
-  case NASSIGN: compile(n->a); EMIT(OSTORE); EMIT(varslot(n->name)); break;
+  case NASSIGN: compile(n->a); EMIT(OSTORE); EMIT(n->bval ? newslot(n->name) : varslot(n->name)); break;
   case NBINOP:  compile(n->a); compile(n->b); EMIT(n->op); break;
   case NUNOP:   compile(n->a); EMIT(n->op == '-' ? ONEG : ONOT); break;
   case NCALL: {
     for (int i = 0; i < n->nargs; i++) compile(n->args[i]);
     int id = find_builtin(n->name);
-    if (id < 0) { fprintf(stderr, "unknown function '%s'\n", n->name); exit(1); }
-    EMIT(OCALL); EMIT(id); EMIT(n->nargs);
+    if (id >= 0) { EMIT(OCALL); EMIT(id); EMIT(n->nargs); }
+    else { int fid = find_func(n->name);
+      if (fid < 0) { fprintf(stderr, "unknown function '%s'\n", n->name); exit(1); }
+      EMIT(OCALL_U); EMIT(fid); EMIT(n->nargs); }
   } break;
+  case NFUNC: { int idx = (int)n->num; EMIT(OJMP); int skip = cp; EMIT(0); funcs[idx].addr = cp;
+    for (int i = 0; i < funcs[idx].nparam; i++) funcs[idx].slots[i] = varslot(funcs[idx].params[i]);
+    compile(n->a); EMIT(OPUSH); EMITV(mknil()); EMIT(ORET); PATCH(skip); } break;
+  case NRET: if (n->a) compile(n->a); else { EMIT(OPUSH); EMITV(mknil()); } EMIT(ORET); break;
   case NIF:
     compile(n->a); EMIT(OJEZ); { int p1 = cp; EMIT(0); compile(n->b);
     if (n->c) { EMIT(OJMP); int p2 = cp; EMIT(0); PATCH(p1); compile(n->c); PATCH(p2); } else PATCH(p1); } break;
   case NWHILE: {
     int top = cp; compile(n->a); EMIT(OJEZ); int ex = cp; EMIT(0);
     compile(n->b); EMIT(OJMP); EMIT(top); PATCH(ex); } break;
-  case NBLOCK: for (int i = 0; i < n->nstmts; i++) compile(n->stmts[i]); break;
+  case NBLOCK: { int saved = nvars;
+    for (int i = 0; i < n->nstmts; i++) { compile(n->stmts[i]); int k = n->stmts[i]->kind; if (k==NCALL||k==NID||k==NNUM||k==NSTR||k==NBOOL||k==NNIL||k==NBINOP||k==NUNOP) EMIT(OPOP); }
+    nvars = saved; } break;
   }
 }
 
@@ -200,6 +228,7 @@ static void run(void) {
     [OEQ]=&&L_EQ, [ONE]=&&L_NE, [OLT]=&&L_LT, [OGT]=&&L_GT, [OLE]=&&L_LE, [OGE]=&&L_GE,
     [OJMP]=&&L_JMP, [OJNZ]=&&L_JNZ, [OJEZ]=&&L_JEZ,
     [OHALT]=&&L_HALT, [ONEG]=&&L_NEG, [ONOT]=&&L_NOT, [OCALL]=&&L_CALL,
+    [OCALL_U]=&&L_CALL_U, [ORET]=&&L_RET, [OPOP]=&&L_POP,
   };
   uint64_t stack[4096]; int sp = 0, ip = 0;
   #define NEXT goto *dispatch[code[ip++]]
@@ -210,7 +239,7 @@ static void run(void) {
   NEXT;
   L_PUSH:  PUSH(code[ip++]); NEXT;
   L_LOAD:  PUSH(vars_[code[ip++]]); NEXT;
-  L_STORE: vars_[code[ip++]] = stack[sp-1]; NEXT;
+  L_STORE: vars_[code[ip++]] = POP; NEXT;
   L_ADD: {
     uint64_t bv = POP, av = POP;
     if (vtag(av)==T_STR && vtag(bv)==T_STR) {
@@ -233,6 +262,16 @@ static void run(void) {
     uint64_t args[16]; for (int i = nargs-1; i >= 0; i--) args[i] = POP;
     PUSH(builtins[id].fn(args, nargs)); NEXT;
   }
+  L_CALL_U: { int idx = (int)code[ip++], nargs = (int)code[ip++];
+    uint64_t args[16]; for (int i = nargs-1; i >= 0; i--) args[i] = POP;
+    frames[csp].ip = ip; frames[csp].nslots = funcs[idx].nparam;
+    for (int i = 0; i < funcs[idx].nparam; i++) { frames[csp].slots[i] = funcs[idx].slots[i]; frames[csp].saved[i] = vars_[funcs[idx].slots[i]]; }
+    csp++; for (int i = 0; i < nargs; i++) vars_[funcs[idx].slots[i]] = args[i];
+    ip = funcs[idx].addr; NEXT; }
+  L_RET: { uint64_t rv = POP; --csp;
+    for (int i = 0; i < frames[csp].nslots; i++) vars_[frames[csp].slots[i]] = frames[csp].saved[i];
+    ip = frames[csp].ip; PUSH(rv); NEXT; }
+  L_POP: sp--; NEXT;
   L_HALT: return;
 }
 

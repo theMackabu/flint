@@ -6,3 +6,13 @@ println(len('flint'));
 println(str(123) + ' is a string now');
 println(num('99') + 1);
 println('length of hello world:', len('hello world'));
+
+// using functions with builtins
+function describe(val) {
+  return type(val) + ': ' + str(val);
+}
+
+println(describe(42));
+println(describe('hi'));
+println(describe(true));
+println(describe(nil));

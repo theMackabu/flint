@@ -1,13 +1,6 @@
-n = 35;
-a = 0;
-b = 1;
-i = 0;
-
-while (i < n) {
-  t = a + b;
-  a = b;
-  b = t;
-  i = i + 1;
+function fib(n) {
+  if (n <= 1) return n;
+  return fib(n - 1) + fib(n - 2);
 }
 
-println('fib 35:', a);
+println('fib 35:', fib(35));

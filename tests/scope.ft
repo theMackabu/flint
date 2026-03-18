@@ -1,0 +1,53 @@
+// block scoping with let
+let x = 1;
+{
+  let x = 99;
+  println('inner x:', x);
+}
+println('outer x:', x);
+
+// nested scopes
+let a = 10;
+{
+  let a = 20;
+  {
+    let a = 30;
+    println('deep a:', a);
+  }
+  println('mid a:', a);
+}
+println('top a:', a);
+
+// let vs bare assignment
+let y = 5;
+{
+  y = 42;
+  println('modified y:', y);
+}
+println('y after block:', y);
+
+// function params are scoped
+function add(a, b) {
+  return a + b;
+}
+println('add:', add(a, 100));
+println('a still:', a);
+
+// function with inner let
+function counter(n) {
+  let total = 0;
+  let i = 0;
+  while (i < n) {
+    total = total + i;
+    i = i + 1;
+  }
+  return total;
+}
+println('sum 0..4:', counter(5));
+
+// recursive scoping
+function fact(n) {
+  if (n <= 1) return 1;
+  return n * fact(n - 1);
+}
+println('5!:', fact(5));
