@@ -1,0 +1,14 @@
+n = 2;
+
+while (n <= 30) {
+  is_prime = 1;
+  d = 2;
+
+  while (d * d <= n) {
+    if (n % d == 0) is_prime = 0;
+    d = d + 1;
+  }
+
+  if (is_prime) println(n);
+  n = n + 1;
+}
