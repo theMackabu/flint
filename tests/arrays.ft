@@ -1,0 +1,115 @@
+// array literals
+let a = [1, 2, 3];
+println(a);
+println(`type: ${type(a)}, len: ${len(a)}`);
+
+// empty array
+let empty = [];
+println(`empty: ${empty}, len: ${len(empty)}`);
+
+// index access
+println(`a[0]=${a[0]}, a[1]=${a[1]}, a[2]=${a[2]}`);
+
+// out of bounds returns nil
+println(`a[99] = ${a[99]}`);
+
+// index assignment
+a[1] = 99;
+println(`after a[1]=99: ${a}`);
+
+// push and pop
+push(a, 4);
+push(a, 5);
+println(`after push 4,5: ${a}`);
+let popped = pop(a);
+println(`popped: ${popped}, now: ${a}`);
+
+// push returns the array (chainable)
+push(push(empty, 'x'), 'y');
+println(`chained push: ${empty}`);
+
+// pop on empty returns nil
+let e2 = [];
+println(`pop empty: ${pop(e2)}`);
+
+// mixed types
+let mixed = [1, 'two', true, nil];
+println(`mixed: ${mixed}`);
+
+// nested arrays
+let matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+println(matrix);
+println(`matrix[0][2] = ${matrix[0][2]}`);
+println(`matrix[2][0] = ${matrix[2][0]}`);
+println(`matrix[1][1] = ${matrix[1][1]}`);
+
+// mutate nested
+matrix[1][1] = 0;
+println(`after matrix[1][1]=0: ${matrix[1]}`);
+
+// iterate with while
+let nums = [10, 20, 30, 40, 50];
+let i = 0;
+let total = 0;
+while (i < len(nums)) {
+  total = total + nums[i];
+  i = i + 1;
+}
+println(`sum of ${nums}: ${total}`);
+
+// build array dynamically
+let squares = [];
+let j = 0;
+while (j < 6) {
+  push(squares, j * j);
+  j = j + 1;
+}
+println(`squares: ${squares}`);
+
+// len updates after push/pop
+let arr = [1, 2];
+println(`len=${len(arr)}`);
+push(arr, 3);
+println(`after push: len=${len(arr)}`);
+pop(arr);
+pop(arr);
+println(`after 2 pops: len=${len(arr)}`);
+
+// array as function argument
+function sum(nums) {
+  let i = 0;
+  let s = 0;
+  while (i < len(nums)) {
+    s = s + nums[i];
+    i = i + 1;
+  }
+  return s;
+}
+println(`sum([1,2,3,4]) = ${sum([1, 2, 3, 4])}`);
+
+// function returning array
+function range(n) {
+  let r = [];
+  let i = 0;
+  while (i < n) {
+    push(r, i);
+    i = i + 1;
+  }
+  return r;
+}
+println(`range(5): ${range(5)}`);
+
+// array of arrays
+let grid = [];
+let r = 0;
+while (r < 3) {
+  let row = [];
+  let c = 0;
+  while (c < 3) {
+    push(row, r * 3 + c);
+    c = c + 1;
+  }
+  push(grid, row);
+  r = r + 1;
+}
+println(`grid: ${grid}`);

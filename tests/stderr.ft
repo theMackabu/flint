@@ -1,4 +1,3 @@
-// logging to stderr so stdout stays clean
 function log(level, msg) {
   eprintln(`[${level}] ${msg}`);
 }
@@ -6,11 +5,7 @@ function log(level, msg) {
 log('INFO', 'starting up');
 log('DEBUG', 'processing data');
 
-// stdout is for actual output
 println('result: 42');
 
 log('WARN', 'something took too long');
 log('INFO', 'done');
-
-// redirect: ./flint tests/stderr.ft 2>/dev/null  (only see stdout)
-// redirect: ./flint tests/stderr.ft 2>&1          (see both)

@@ -1,5 +1,4 @@
-// fork a child process
-let pid = fork();
+const pid = fork();
 
 if (pid == 0) {
   println(`child: pid ${$`echo $$`}`);
@@ -7,11 +6,10 @@ if (pid == 0) {
   exit(42);
 } else {
   println(`parent: forked child ${pid}`);
-  let status = wait();
+  const status = wait();
   println(`parent: child exited with ${status}`);
 }
 
-// fork multiple workers
 let i = 0;
 while (i < 3) {
   let p = fork();
@@ -22,7 +20,6 @@ while (i < 3) {
   i = i + 1;
 }
 
-// wait for all
 let w = 0;
 while (w < 3) {
   wait();

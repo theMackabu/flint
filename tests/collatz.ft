@@ -1,6 +1,6 @@
 function collatz(n) {
   let steps = 0;
-  println(`start: ${n}`);
+  println('start', n);
 
   while (n != 1) {
     if (n % 2 == 0) n = n / 2;
@@ -11,4 +11,4 @@ function collatz(n) {
   return steps;
 }
 
-println(`steps to reach 1: ${collatz(27)}`);
+println('steps to reach 1:', collatz(27));

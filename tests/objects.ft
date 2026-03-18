@@ -1,0 +1,128 @@
+// object literals
+let obj = { name: 'flint', version: 1, cool: true };
+println(obj);
+println(`type: ${type(obj)}, len: ${len(obj)}`);
+
+// empty object
+let empty = {};
+println(`empty: ${empty}, len: ${len(empty)}`);
+
+// dot access
+println(`name: ${obj.name}`);
+println(`version: ${obj.version}`);
+println(`cool: ${obj.cool}`);
+
+// bracket access
+println(`obj['name']: ${obj['name']}`);
+
+// missing key returns nil
+println(`missing: ${obj.missing}`);
+
+// dot assignment
+obj.version = 2;
+println(`updated version: ${obj.version}`);
+
+// bracket assignment
+obj['name'] = 'flint2';
+println(`updated name: ${obj.name}`);
+
+// add new properties
+obj.author = 'you';
+println(`added author: ${obj}`);
+
+// has
+println(`has 'name': ${has(obj, 'name')}`);
+println(`has 'missing': ${has(obj, 'missing')}`);
+
+// delete
+delete (obj, 'cool');
+println(`after delete 'cool': ${obj}`);
+println(`has 'cool': ${has(obj, 'cool')}`);
+
+// delete returns bool
+println(`delete existing: ${delete (obj, 'author')}`);
+println(`delete missing: ${delete (obj, 'nope')}`);
+
+// keys and values
+let person = { first: 'Alice', last: 'Smith', age: 30 };
+let k = keys(person);
+let v = values(person);
+println(`keys: ${k}`);
+println(`values: ${v}`);
+
+// iterate over keys
+let i = 0;
+while (i < len(k)) {
+  println(`  ${k[i]}: ${person[k[i]]}`);
+  i = i + 1;
+}
+
+// string keys in literals
+let quoted = { 'hello world': 1, 'with spaces': 2 };
+println(`quoted keys: ${quoted}`);
+println(`quoted['hello world'] = ${quoted['hello world']}`);
+
+// nested objects
+let config = {
+  db: { host: 'localhost', port: 5432 },
+  app: { name: 'myapp', debug: true }
+};
+println(config);
+println(`db host: ${config.db.host}`);
+println(`db port: ${config.db.port}`);
+println(`app name: ${config.app.name}`);
+
+// mutate nested
+config.db.port = 3306;
+println(`updated db port: ${config.db.port}`);
+
+// objects containing arrays
+let team = {
+  name: 'devs',
+  members: ['alice', 'bob', 'charlie']
+};
+println(team);
+println(`first member: ${team.members[0]}`);
+push(team.members, 'dave');
+println(`after adding dave: ${team.members}`);
+
+// arrays containing objects
+let users = [
+  { name: 'alice', age: 30 },
+  { name: 'bob', age: 25 },
+  { name: 'charlie', age: 35 }
+];
+println(users);
+let u = 0;
+while (u < len(users)) {
+  println(`  ${users[u].name} is ${users[u].age}`);
+  u = u + 1;
+}
+
+// function returning object
+function make_point(x, y) {
+  return { x: x, y: y };
+}
+let p = make_point(3, 4);
+println(`point: ${p}, x=${p.x}, y=${p.y}`);
+
+// function taking object
+function greet(person) {
+  return `hello ${person.name}, age ${person.age}`;
+}
+println(greet({ name: 'Eve', age: 28 }));
+
+// building object dynamically
+let counts = {};
+let words = ['a', 'b', 'a', 'c', 'b', 'a'];
+let w = 0;
+while (w < len(words)) {
+  let word = words[w];
+  if (has(counts, word)) {
+    counts[word] = counts[word] + 1;
+  } else {
+    counts[word] = 1;
+  }
+  w = w + 1;
+}
+println(`word counts: ${counts}`);
