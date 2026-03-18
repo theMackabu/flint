@@ -61,7 +61,7 @@ static struct { char *name; Builtin fn; } builtins[] = {
 #define NBUILTINS (sizeof builtins / sizeof builtins[0])
 static int find_builtin(char *name) { for (int i = 0; i < (int)NBUILTINS; i++) if (!strcmp(builtins[i].name, name)) return i; return -1; }
 
-static struct { char name[64]; char params[16][64]; int nparam; int addr; int slots[16]; } funcs[256];
+static struct { char name[64]; char params[16][64]; int nparam; int addr; int slots[16]; int sbase, scount; } funcs[256];
 static int nfuncs; static int find_func(char *name) { for (int i = 0; i < nfuncs; i++) if (!strcmp(funcs[i].name, name)) return i; return -1; }
 
 enum Tok { TNUM=128, TSTR, TID, TIF, TELSE, TWHILE, TTRUE, TFALSE, TNIL, TEQ, TNE, TLE, TGE, TFN, TRET, TLET, TEOF };
@@ -178,10 +178,10 @@ static Node *stmt(void) {
   } Node *n = expr(); expect(';'); return n;
 }
 
-static uint64_t code[65536]; static int cp; static uint64_t vars_[256]; static char *varnames[256]; static int nvars;
-static struct { int ip; uint64_t saved[16]; int nslots; int slots[16]; } frames[256]; static int csp;
-static int varslot(char *n) { for (int i = nvars-1; i >= 0; i--) if (!strcmp(varnames[i], n)) return i; varnames[nvars] = strdup(n); return nvars++; }
-static int newslot(char *n) { varnames[nvars] = strdup(n); return nvars++; }
+static uint64_t code[65536]; static int cp; static uint64_t vars_[256]; static char *varnames[256]; static int nvars, nvars_hwm;
+static struct { int ip; uint64_t saved[64]; int base, count; } frames[256]; static int csp;
+static int varslot(char *n) { for (int i = nvars-1; i >= 0; i--) if (!strcmp(varnames[i], n)) return i; varnames[nvars] = strdup(n); if (++nvars > nvars_hwm) nvars_hwm = nvars; return nvars-1; }
+static int newslot(char *n) { varnames[nvars] = strdup(n); if (++nvars > nvars_hwm) nvars_hwm = nvars; return nvars-1; }
 
 #define EMIT(o)  (code[cp++] = (uint64_t)(o))
 #define EMITV(v) (code[cp++] = (v))
@@ -206,8 +206,11 @@ static void compile(Node *n) {
       EMIT(OCALL_U); EMIT(fid); EMIT(n->nargs); }
   } break;
   case NFUNC: { int idx = (int)n->num; EMIT(OJMP); int skip = cp; EMIT(0); funcs[idx].addr = cp;
+    funcs[idx].sbase = nvars; int old_hwm = nvars_hwm; nvars_hwm = nvars;
     for (int i = 0; i < funcs[idx].nparam; i++) funcs[idx].slots[i] = varslot(funcs[idx].params[i]);
-    compile(n->a); EMIT(OPUSH); EMITV(mknil()); EMIT(ORET); PATCH(skip); } break;
+    compile(n->a); funcs[idx].scount = nvars_hwm - funcs[idx].sbase;
+    nvars_hwm = nvars_hwm > old_hwm ? nvars_hwm : old_hwm;
+    EMIT(OPUSH); EMITV(mknil()); EMIT(ORET); PATCH(skip); } break;
   case NRET: if (n->a) compile(n->a); else { EMIT(OPUSH); EMITV(mknil()); } EMIT(ORET); break;
   case NIF:
     compile(n->a); EMIT(OJEZ); { int p1 = cp; EMIT(0); compile(n->b);
@@ -264,12 +267,12 @@ static void run(void) {
   }
   L_CALL_U: { int idx = (int)code[ip++], nargs = (int)code[ip++];
     uint64_t args[16]; for (int i = nargs-1; i >= 0; i--) args[i] = POP;
-    frames[csp].ip = ip; frames[csp].nslots = funcs[idx].nparam;
-    for (int i = 0; i < funcs[idx].nparam; i++) { frames[csp].slots[i] = funcs[idx].slots[i]; frames[csp].saved[i] = vars_[funcs[idx].slots[i]]; }
+    frames[csp].ip = ip; frames[csp].base = funcs[idx].sbase; frames[csp].count = funcs[idx].scount;
+    for (int i = 0; i < funcs[idx].scount; i++) frames[csp].saved[i] = vars_[funcs[idx].sbase + i];
     csp++; for (int i = 0; i < nargs; i++) vars_[funcs[idx].slots[i]] = args[i];
     ip = funcs[idx].addr; NEXT; }
   L_RET: { uint64_t rv = POP; --csp;
-    for (int i = 0; i < frames[csp].nslots; i++) vars_[frames[csp].slots[i]] = frames[csp].saved[i];
+    for (int i = 0; i < frames[csp].count; i++) vars_[frames[csp].base + i] = frames[csp].saved[i];
     ip = frames[csp].ip; PUSH(rv); NEXT; }
   L_POP: sp--; NEXT;
   L_HALT: return;
