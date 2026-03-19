@@ -3,4 +3,4 @@
 const name = env('USER');
 
 println(`hello, ${name}! this script was run directly.`);
-println(`pid: ${str(exec('echo $$'))}`);
+println(`pid: ${pid()}`);

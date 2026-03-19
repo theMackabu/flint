@@ -64,9 +64,10 @@ static void print_val(uint64_t v, FILE *fp) {
   }
 }
 
+static uint64_t b_pid(uint64_t *args, int n) { (void)args; (void)n; return mknum(getpid()); }
+static uint64_t b_exit(uint64_t *args, int n) { exit(n > 0 && vtag(args[0]) == T_NUM ? (int)asnum(args[0]) : 0); }
 static uint64_t b_print(uint64_t *args, int n) { for (int i = 0; i < n; i++) { if (i) printf(" "); print_val(args[i], stdout); } return mknil(); }
 static uint64_t b_println(uint64_t *args, int n) { b_print(args, n); printf("\n"); return mknil(); }
-static uint64_t b_exit(uint64_t *args, int n) { exit(n > 0 && vtag(args[0]) == T_NUM ? (int)asnum(args[0]) : 0); }
 
 static uint64_t b_len(uint64_t *args, int n) {
   (void)n; if (vtag(args[0])==T_STR) return mknum(strlen(strtab[vdata(args[0])]));
@@ -252,7 +253,7 @@ static uint64_t b_has(uint64_t *args, int n) {
 
 typedef uint64_t (*Builtin)(uint64_t*, int);
 static struct { char *name; Builtin fn; } builtins[] = {
-  {"print", b_print}, {"println", b_println}, {"eprintln", b_eprintln}, {"len", b_len}, {"type", b_type}, {"str", b_str}, {"num", b_num}, {"exec", b_exec}, {"fetch", b_fetch}, {"pipe", b_pipe}, {"exit", b_exit}, {"env", b_env}, {"setenv", b_setenv}, {"fork", b_fork}, {"wait", b_wait}, {"read_file", b_read_file}, {"write_file", b_write_file}, {"trim", b_trim}, {"substr", b_substr}, {"index_of", b_index_of}, {"replace", b_replace}, {"upper", b_upper}, {"lower", b_lower}, {"push", b_push}, {"pop", b_pop}, {"keys", b_keys}, {"values", b_values}, {"has", b_has},
+  {"print", b_print}, {"println", b_println}, {"eprintln", b_eprintln}, {"len", b_len}, {"type", b_type}, {"str", b_str}, {"num", b_num}, {"exec", b_exec}, {"fetch", b_fetch}, {"pipe", b_pipe}, {"exit", b_exit}, {"env", b_env}, {"setenv", b_setenv}, {"fork", b_fork}, {"pid", b_pid}, {"wait", b_wait}, {"read_file", b_read_file}, {"write_file", b_write_file}, {"trim", b_trim}, {"substr", b_substr}, {"index_of", b_index_of}, {"replace", b_replace}, {"upper", b_upper}, {"lower", b_lower}, {"push", b_push}, {"pop", b_pop}, {"keys", b_keys}, {"values", b_values}, {"has", b_has},
 };
 
 #define NBUILTINS (sizeof builtins / sizeof builtins[0])

@@ -1,7 +1,7 @@
 const pid = fork();
 
 if (pid == 0) {
-  println(`child: pid ${$`echo $$`}`);
+  println(`child: pid ${pid()}`);
   println('child: doing work...');
   exit(42);
 } else {
