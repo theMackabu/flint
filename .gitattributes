@@ -1,1 +1,2 @@
 *.ft linguist-language=JavaScript
+tests/** linguist-detectable=false
