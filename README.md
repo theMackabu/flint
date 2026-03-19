@@ -4,6 +4,8 @@ Scripting language for shell automation
 
 ### usage
 
+tip: add `#!/usr/bin/env flint` to the top of a script and run it directly
+
 ```bash
 $ make # requires clang -std=gnu23
 $ ./flint script.ft
@@ -52,5 +54,5 @@ const names = pipe(csv, "awk -F, 'NR>1 {print $1}'");
 | `fetch(url)`                                 | HTTP GET via curl                                                |
 | `read_file(path)` / `write_file(path, data)` | file I/O                                                         |
 | `env(name)` / `setenv(name, val)`            | environment variables                                            |
-| `fork()` / `wait()`                          | process control                                                  |
+| `fork()` / `pid()` / `wait()`                | process control                                                  |
 | `exit(code?)`                                | exit                                                             |
