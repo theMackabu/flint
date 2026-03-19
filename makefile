@@ -13,4 +13,7 @@ run: $(TARGET)
 clean:
 	rm -f $(TARGET)
 
-.PHONY: run clean
+install: $(TARGET)
+	cp $(TARGET) $(HOME)/.local/bin/$(TARGET)
+
+.PHONY: run clean install

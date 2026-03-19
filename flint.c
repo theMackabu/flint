@@ -580,6 +580,7 @@ static void run(void) {
 int main(int argc, char **argv) {
   FILE *f = argc > 1 ? fopen(argv[1], "r"): stdin; if (!f) { perror("fopen"); return 1; }
   int len = fread(src, 1, sizeof(src)-1, f); src[len] = 0; if (f != stdin) fclose(f);
-  p = src; next(); Node *prog = mknode(NBLOCK); while (tok != TEOF) prog->stmts[prog->nstmts++] = stmt();
+  p = src; if (p[0] == '#' && p[1] == '!') { while (*p && *p != '\n') p++; if (*p == '\n') p++; }
+  next(); Node *prog = mknode(NBLOCK); while (tok != TEOF) prog->stmts[prog->nstmts++] = stmt();
   compile(prog); EMIT(OHALT); run();
 }
